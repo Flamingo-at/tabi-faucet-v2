@@ -17,6 +17,7 @@ pip install -r requirements.txt
 + Create ```private_key.txt``` - write the private key each on a new line
 + Open ```config.py``` with a text editor:
   + ```THREADS``` - number of simultaneous faucet
+  + ```CAPTCHA_KEY``` - [capsolver](https://www.capsolver.com/) captcha key
 + Run the bot:
 ```python
 python tabi_faucet_v2.py

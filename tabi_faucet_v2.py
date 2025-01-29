@@ -20,6 +20,46 @@ def create_signature(private_key: str, text):
     return signed_message.signature.hex()
 
 
+async def sending_captcha():
+    try:
+        async with ClientSession() as client:
+            response = await client.post('https://api.capsolver.com/createTask',
+                                         json={
+                                             'clientKey': CAPTCHA_KEY,
+                                             'task': {
+                                                 'type': 'AntiTurnstileTaskProxyLess',
+                                                 'websiteURL': 'https://carnival.tabichain.com/',
+                                                 'websiteKey': '0x4AAAAAAAx_IiAtQcC0atHR'
+                                             }
+                                         })
+            data = await response.json()
+            return await solving_captcha(client, data['taskId'])
+    except Exception as error:
+        raise Exception(error)
+
+
+async def solving_captcha(client: ClientSession, taskId: str):
+    while True:
+        try:
+            response = await client.post('https://api.capsolver.com/getTaskResult',
+                                         json={
+                                             'clientKey': CAPTCHA_KEY,
+                                             'taskId': taskId
+                                         })
+            data = await response.json()
+            if 'ERROR' in str(data):
+                logger.error(data)
+                return await sending_captcha()
+            elif 'ready' in str(data):
+                captcha = data['solution']['token']
+                return captcha
+
+        except Exception as error:
+            raise error
+
+        await asyncio.sleep(2)
+
+
 async def worker():
     while not q.empty():
         try:
@@ -54,7 +94,10 @@ async def worker():
                     'Authorization': access_token
                 })
 
-                response = await client.post('https://api.tabibot.com/api/testnet/activity/faucet/claim')
+                logger.info(f'{address} | Solving captcha')
+                captcha = await sending_captcha()
+
+                response = await client.post(f'https://api.tabibot.com/api/testnet/activity/faucet/claim?t={captcha}')
                 data = await response.json()
                 if data['code'] != 200:
                     logger.error(f'{address} | Error Claim | {data}')
@@ -76,8 +119,8 @@ async def check_status_faucet():
             response = await client.get('https://api.tabibot.com/api/testnet/activity/token/status')
             data = await response.json()
             if data['data']['claimed_total_val'] >= data['data']['total_token_num']:
-                duration = data['data']['next_refresh_time']/1_000_000 - int(time.time())
-                next_open_faucet  = datetime.timedelta(seconds=duration)
+                duration = data['data']['next_refresh_time'] / 1_000_000 - int(time.time())
+                next_open_faucet = datetime.timedelta(seconds=duration)
                 logger.info(f'Faucet will open in {next_open_faucet}')
                 return False
             return True
@@ -99,7 +142,6 @@ if __name__ == '__main__':
         private_keys = file.read().splitlines()
 
     q = asyncio.Queue()
-
     for private_key in private_keys:
         q.put_nowait(private_key)
 

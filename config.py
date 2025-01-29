@@ -1,1 +1,2 @@
 THREADS = 1
+CAPTCHA_KEY = ''
